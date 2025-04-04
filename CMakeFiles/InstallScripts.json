@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/Projects/Visual Studio/SDL3 GPU/cmake_install.cmake",
+		"D:/Projects/Visual Studio/SDL3 GPU/SDL3 GPU/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

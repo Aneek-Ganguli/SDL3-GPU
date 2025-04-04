@@ -1,0 +1,3 @@
+D:/Projects/Visual Studio/SDL3 GPU/CMakeFiles/ALL_BUILD.dir
+D:/Projects/Visual Studio/SDL3 GPU/CMakeFiles/ZERO_CHECK.dir
+D:/Projects/Visual Studio/SDL3 GPU/SDL3 GPU/CMakeFiles/CMakeTarget.dir
