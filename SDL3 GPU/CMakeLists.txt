@@ -12,5 +12,6 @@ endif()
 
 target_include_directories(CMakeTarget PRIVATE "C:/DEV/SDL/SDL3/SDL3 VC/include")
 target_include_directories(CMakeTarget PRIVATE "C:/DEV/SDL/SDL_image/SDL3_image VC/include")
+target_include_directories(CMakeTarget PRIVATE "external")
 target_link_libraries(CMakeTarget PRIVATE "C:/DEV/SDL/SDL3/SDL3 VC/lib/x64/SDL3.lib")
 target_link_libraries(CMakeTarget PRIVATE "C:/DEV/SDL/SDL_image/SDL3_image VC/lib/x64/SDL3_image.lib")

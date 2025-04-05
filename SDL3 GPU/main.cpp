@@ -1,6 +1,14 @@
 ﻿#include <iostream>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
+#include <glm/glm.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+struct UBO {
+	glm::mat4 mvp;
+};
 
 SDL_GPUShader* load_shader(
 	SDL_GPUDevice* device,
@@ -68,7 +76,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	SDL_GPUDevice* device = NULL;
-	device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV,true,NULL);
+	device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
 	if (!device) {
 		std::cout << "Failed to initilize gpu. Error: " << SDL_GetError() << std::endl;
 	}
@@ -79,10 +87,8 @@ int main(int argc, char* argv[]) {
 
 	SDL_GPUColorTargetInfo colorInfo = {};
 
-	
-
-	SDL_GPUShader* vertexShader = load_shader(device,"../../../../SDL3 GPU/shader/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX,NULL,NULL,NULL,NULL);
-	SDL_GPUShader* fragmentShader = load_shader(device,"../../../../SDL3 GPU/shader/shader.spv.vert", SDL_GPU_SHADERSTAGE_FRAGMENT,NULL,NULL,NULL,NULL);
+	SDL_GPUShader* vertexShader = load_shader(device, "../../../../SDL3 GPU/shader/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, NULL, 1, NULL, NULL);
+	SDL_GPUShader* fragmentShader = load_shader(device, "../../../../SDL3 GPU/shader/shader.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, NULL, NULL, NULL, NULL);
 
 	SDL_GPUColorTargetBlendState blendState = {};
 	blendState.enable_blend = false;
@@ -101,16 +107,36 @@ int main(int argc, char* argv[]) {
 	pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 	pipelineInfo.target_info = target_info;
 
-	SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device,&pipelineInfo);
+	SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device, &pipelineInfo);
+	if (!pipeline) {
+		std::cout << "Failed to create pipeline. Error: " << SDL_GetError() << std::endl;
+	}
 
+	int width, height;
+	SDL_GetWindowSize(window, &width, &height);
+
+	const float rotationSpeed = glm::radians(90.0f);
+
+	float rotation = 0.0f;
+
+	glm::mat4 Projection = glm::perspective(70.0f, (float)width / height, 0.000000f, 10000.0f);
+	glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.0f, 0.0f, -10.0f)) * glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 1.0f, -0.0f));
+
+	Uint64 lastTime = SDL_GetPerformanceCounter();
 	SDL_Event event;
 	bool running = true;
 	while (running) {
+		Uint64 currentTime = SDL_GetPerformanceCounter();
+		float deltaTime = (float)(currentTime - lastTime) / SDL_GetPerformanceFrequency();
+		lastTime = currentTime;
+
 		while (SDL_PollEvent(&event)) {
 			if (event.type == SDL_EVENT_QUIT) {
 				running = false;
 			}
 		}
+
+		UBO ubo = { Projection * model };
 		SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
 		SDL_GPUTexture* texture;
 		SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, window, &texture, NULL, NULL);
@@ -123,8 +149,11 @@ int main(int argc, char* argv[]) {
 		colorInfo.store_op = SDL_GPU_STOREOP_STORE;
 
 		SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorInfo, 1, NULL);
+		rotation += rotationSpeed * deltaTime;
+		model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.0f, 0.0f, -10.0f)) * glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 1.0f, -0.0f));
 
-		SDL_BindGPUGraphicsPipeline(renderPass,pipeline);
+		SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+		SDL_PushGPUVertexUniformData(commandBuffer, 0, &ubo, sizeof(ubo));//&ubo, sizeof(ubo)
 		SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 
 		SDL_EndGPURenderPass(renderPass);
