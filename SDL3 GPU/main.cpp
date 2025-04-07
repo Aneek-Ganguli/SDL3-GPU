@@ -10,6 +10,10 @@ struct UBO {
 	glm::mat4 mvp;
 };
 
+struct Vec3 {
+	float x, y, z;
+};
+
 SDL_GPUShader* load_shader(
 	SDL_GPUDevice* device,
 	const char* filename,
@@ -101,11 +105,69 @@ int main(int argc, char* argv[]) {
 	target_info.num_color_targets = 1;
 	target_info.color_target_descriptions = &color_target_descriptions;
 
+	Vec3 vertices[] = {
+		{-1.0f, -1.0f, 0.0f, },
+		{ 1.0f, -1.0f, 0.0f, },
+		{0.0f, 1.0f, 0.0f }
+	};
+	SDL_GPUBufferCreateInfo vertexBufferInfo = {};
+	vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+	vertexBufferInfo.size = sizeof(vertices);
+	SDL_GPUBuffer* vertex_buffer = SDL_CreateGPUBuffer(device, &vertexBufferInfo);
+	if (!vertex_buffer) {
+		std::cout << "Failed to create vertex buffer. Error: " << SDL_GetError() << std::endl;
+	}
+
+	SDL_GPUTransferBufferCreateInfo vertexTransferBufferCreateInfo = {};
+	vertexTransferBufferCreateInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	vertexTransferBufferCreateInfo.size = sizeof(vertices);
+
+	SDL_GPUTransferBuffer* vertexTransferBuffer = SDL_CreateGPUTransferBuffer(device,&vertexTransferBufferCreateInfo );
+	
+	void* vertexMem = SDL_MapGPUTransferBuffer(device, vertexTransferBuffer,false);
+	memcpy(vertexMem, vertices, sizeof(vertices));	
+	SDL_UnmapGPUTransferBuffer(device, vertexTransferBuffer);
+	
+	SDL_GPUCommandBuffer* copyCommandBuffer = SDL_AcquireGPUCommandBuffer(device);
+	
+	SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(copyCommandBuffer);
+	
+	SDL_GPUTransferBufferLocation vertexTransferBufferLocation = {};
+	vertexTransferBufferLocation.transfer_buffer = vertexTransferBuffer;
+
+	SDL_GPUBufferRegion vertexBufferLocation = {};
+	vertexBufferLocation.buffer = vertex_buffer;
+	vertexBufferLocation.size = sizeof(vertices);
+	
+	SDL_UploadToGPUBuffer(copyPass, &vertexTransferBufferLocation , &vertexBufferLocation, false);
+	SDL_EndGPUCopyPass(copyPass); 
+	assert(SDL_SubmitGPUCommandBuffer(copyCommandBuffer));
+
+
+
+	SDL_GPUVertexBufferDescription vertexBufferDescription = {};
+	vertexBufferDescription.slot = 0;
+	vertexBufferDescription.pitch = sizeof(Vec3);
+	vertexBufferDescription.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+	SDL_GPUVertexAttribute vertexAttribute = {};
+	vertexAttribute.location = 0;
+	vertexAttribute.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+	vertexAttribute.offset = 0;
+
+    // Update the vertex input state to use the correct type
+    SDL_GPUVertexInputState vertexInputState = {}; 
+    vertexInputState.num_vertex_buffers = 1;
+    vertexInputState.vertex_buffer_descriptions = &vertexBufferDescription;
+    vertexInputState.num_vertex_attributes = 1;
+    vertexInputState.vertex_attributes = &vertexAttribute;
+    // Change the assignment of vertex_attributes to point to the correct type
 	SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
 	pipelineInfo.vertex_shader = vertexShader;
 	pipelineInfo.fragment_shader = fragmentShader;
 	pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 	pipelineInfo.target_info = target_info;
+	pipelineInfo.vertex_input_state = vertexInputState;
 
 	SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device, &pipelineInfo);
 	if (!pipeline) {
@@ -121,6 +183,10 @@ int main(int argc, char* argv[]) {
 
 	glm::mat4 Projection = glm::perspective(70.0f, (float)width / height, 0.000000f, 10000.0f);
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.0f, 0.0f, -10.0f)) * glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 1.0f, -0.0f));
+
+	SDL_GPUBufferBinding vertexBufferBinding = {};
+	vertexBufferBinding.buffer = vertex_buffer;
+	vertexBufferBinding.offset = 0;
 
 	Uint64 lastTime = SDL_GetPerformanceCounter();
 	SDL_Event event;
@@ -153,11 +219,11 @@ int main(int argc, char* argv[]) {
 		model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.0f, 0.0f, -10.0f)) * glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 1.0f, -0.0f));
 
 		SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+		SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBufferBinding, 1);
 		SDL_PushGPUVertexUniformData(commandBuffer, 0, &ubo, sizeof(ubo));//&ubo, sizeof(ubo)
 		SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
-
 		SDL_EndGPURenderPass(renderPass);
-		SDL_SubmitGPUCommandBuffer(commandBuffer);
+		assert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 	}
 
 	SDL_DestroyWindow(window);
