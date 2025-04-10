@@ -14,6 +14,11 @@ struct Vec3 {
 	float x, y, z;
 };
 
+struct VertexData {
+	Vec3 position;
+	SDL_FColor color;
+};
+
 SDL_GPUShader* load_shader(
 	SDL_GPUDevice* device,
 	const char* filename,
@@ -105,10 +110,10 @@ int main(int argc, char* argv[]) {
 	target_info.num_color_targets = 1;
 	target_info.color_target_descriptions = &color_target_descriptions;
 
-	Vec3 vertices[] = {
-		{-1.0f, -1.0f, 0.0f, },
-		{ 1.0f, -1.0f, 0.0f, },
-		{0.0f, 1.0f, 0.0f }
+	VertexData vertices[] = {
+		{-1.0f, -1.0f, 0.0f,{1.0f,0.0f,0.0f,1.0f} },
+		{ 1.0f, -1.0f, 0.0f,{0.0f,1.0f,0.0f,1.0f} },
+		{ 0.0f,  1.0f, 0.0f,{0.0f,0.0f,1.0f,1.0f} }
 	};
 	SDL_GPUBufferCreateInfo vertexBufferInfo = {};
 	vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
@@ -143,24 +148,27 @@ int main(int argc, char* argv[]) {
 	SDL_EndGPUCopyPass(copyPass); 
 	assert(SDL_SubmitGPUCommandBuffer(copyCommandBuffer));
 
-
-
 	SDL_GPUVertexBufferDescription vertexBufferDescription = {};
 	vertexBufferDescription.slot = 0;
-	vertexBufferDescription.pitch = sizeof(Vec3);
+	vertexBufferDescription.pitch = sizeof(VertexData);
 	vertexBufferDescription.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-	SDL_GPUVertexAttribute vertexAttribute = {};
-	vertexAttribute.location = 0;
-	vertexAttribute.format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-	vertexAttribute.offset = 0;
+	SDL_GPUVertexAttribute vertexAttribute[2] = {};
+	vertexAttribute[0].location = 0;
+	vertexAttribute[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+	vertexAttribute[0].offset = offsetof(VertexData,position);
+	vertexAttribute[1].location = 1;
+	vertexAttribute[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+	vertexAttribute[1].offset = offsetof(VertexData,color);
 
+
+	SDL_GPUVertexAttribute* vertexAttributePointer = vertexAttribute;
     // Update the vertex input state to use the correct type
     SDL_GPUVertexInputState vertexInputState = {}; 
     vertexInputState.num_vertex_buffers = 1;
     vertexInputState.vertex_buffer_descriptions = &vertexBufferDescription;
-    vertexInputState.num_vertex_attributes = 1;
-    vertexInputState.vertex_attributes = &vertexAttribute;
+    vertexInputState.num_vertex_attributes = 2;
+    vertexInputState.vertex_attributes = vertexAttribute;
     // Change the assignment of vertex_attributes to point to the correct type
 	SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
 	pipelineInfo.vertex_shader = vertexShader;
@@ -187,6 +195,8 @@ int main(int argc, char* argv[]) {
 	SDL_GPUBufferBinding vertexBufferBinding = {};
 	vertexBufferBinding.buffer = vertex_buffer;
 	vertexBufferBinding.offset = 0;
+
+	SDL_ReleaseGPUTransferBuffer(device, vertexTransferBuffer);	
 
 	Uint64 lastTime = SDL_GetPerformanceCounter();
 	SDL_Event event;
@@ -238,3 +248,32 @@ int main(int argc, char* argv[]) {
 // render - bnd everything
 //4.end renderpass
 //5.submit command buffer
+
+
+//1.	Define Vertex Structure: Define a structure that represents your vertex data, including positions, colors, normals, etc.
+//2.	Create Vertex Buffer : Create a GPU buffer to store your vertex data.
+//3.	Upload Vertex Data : Upload your vertex data to the GPU buffer.
+//		SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
+//transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+//transferBufferInfo.size = sizeof(vertices);
+//SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferBufferInfo);
+//
+//void* mappedMemory = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+//memcpy(mappedMemory, vertices, sizeof(vertices));
+//SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+//
+//SDL_GPUCommandBuffer* copyCommandBuffer = SDL_AcquireGPUCommandBuffer(device);
+//SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(copyCommandBuffer);
+//
+//SDL_GPUTransferBufferLocation transferBufferLocation = {};
+//transferBufferLocation.transfer_buffer = transferBuffer;
+//
+//SDL_GPUBufferRegion bufferRegion = {};
+//bufferRegion.buffer = vertexBuffer;
+//bufferRegion.size = sizeof(vertices);
+//
+//SDL_UploadToGPUBuffer(copyPass, &transferBufferLocation, &bufferRegion, false);
+//SDL_EndGPUCopyPass(copyPass);
+//SDL_SubmitGPUCommandBuffer(copyCommandBuffer);
+//4.	Describe Vertex Buffer : Define the layout of your vertex buffer, specifying the attributes and their formats.
+//5.	Bind Vertex Buffer : Bind the vertex buffer to the pipeline before drawing.
