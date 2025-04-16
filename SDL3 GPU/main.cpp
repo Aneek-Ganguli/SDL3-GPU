@@ -131,10 +131,10 @@ int main(int argc, char* argv[]) {
 
 	//position, color
     VertexData vertices[] = {
-        {{-0.5f,  0.5f, 0.0f },{0,0} , {1.0f, 0.0f, 0.0f, 1.0f}}, // Triangle 1
-        {{ 0.5f,  0.5f, 0.0f },{0,0} , {0.0f, 1.0f, 0.0f, 1.0f}},
+        {{-0.5f,  0.5f, 0.0f },{0,1} , {1.0f, 0.0f, 0.0f, 1.0f}}, // Triangle 1
+        {{ 0.5f,  0.5f, 0.0f },{1,1} , {0.0f, 1.0f, 0.0f, 1.0f}},
         {{-0.5f, -0.5f, 0.0f },{0,0} , {0.0f, 0.0f, 1.0f, 1.0f}},
-        {{ 0.5f, -0.5f, 0.0f },{0,0} , {1.0f, 1.0f, 0.0f, 1.0f}}, // Triangle 2
+        {{ 0.5f, -0.5f, 0.0f },{1,0} , {1.0f, 1.0f, 0.0f, 1.0f}}, // Triangle 2
     };
 
     Uint32 indices[] {
@@ -371,3 +371,6 @@ int main(int argc, char* argv[]) {
 //textures
 // load texture
 // 
+
+
+// i hate u nuget
