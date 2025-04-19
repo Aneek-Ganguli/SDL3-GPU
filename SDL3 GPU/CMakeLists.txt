@@ -11,5 +11,7 @@ endif()
 # TODO: Add tests and install targets if needed.
 
 target_include_directories(CMakeTarget PRIVATE "C:/DEV/SDL/SDL3/SDL3 VC/include")
+target_include_directories(CMakeTarget PRIVATE "C:/Program Files/Assimp/include")
 target_include_directories(CMakeTarget PRIVATE "external")
 target_link_libraries(CMakeTarget PRIVATE "C:/DEV/SDL/SDL3/SDL3 VC/lib/x64/SDL3.lib")
+target_link_libraries(CMakeTarget PRIVATE "C:/Program Files/Assimp/lib/x64/assimp-vc143-mt.lib")

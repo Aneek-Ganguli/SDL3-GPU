@@ -6,6 +6,9 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <stdio.h>
 #include <stb/stb_image.h>
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 struct UBO {
     glm::mat4 mvp;
@@ -100,7 +103,7 @@ int main(int argc, char* argv[]) {
     }
     // Textures
     int imageH, imageW;
-	stbi_uc * image_data = stbi_load("res/cobblestone.png",&imageW,&imageH,NULL,4);
+	stbi_uc * image_data = stbi_load("res/viking_room.png",&imageW,&imageH,NULL,4);
 	assert(image_data != NULL);
 	SDL_GPUTextureCreateInfo textureCreateInfo = {};
     textureCreateInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -111,7 +114,37 @@ int main(int argc, char* argv[]) {
     textureCreateInfo.num_levels = 1;
     SDL_GPUTexture* texture = SDL_CreateGPUTexture(device, &textureCreateInfo);
 
+    //Models
+	Assimp::Importer importer;
+	const aiScene* scene = importer.ReadFile("res/viking_room.obj", aiProcess_Triangulate);
+	assert(scene != NULL);
+    
+	std::vector<VertexData> vertices;
+	std::vector<Uint32> indices;
 
+    for (size_t i{};i < scene->mNumMeshes;++i) {
+		const auto& mesh = scene->mMeshes[i];
+        for (size_t j{};j < mesh->mNumVertices;++j) {
+			const auto& vertex = mesh->mVertices[j];
+            vertices.push_back({
+				.position = {vertex.x, vertex.y, vertex.z},
+				.texcoord = mesh->mTextureCoords[0] ? Vec2{mesh->mTextureCoords[0][j].x, mesh->mTextureCoords[0][j].y} : Vec2{0, 0},
+                .color = {1.0f, 1.0f, 1.0f, 1.0f}
+                }
+            );
+        }
+        for (size_t j{};j < mesh->mNumFaces;++j) {
+			const auto& face = mesh->mFaces[j];
+            for (size_t k{};k < face.mNumIndices;++k) {
+				indices.push_back(face.mIndices[k]);
+            }
+        }
+    }
+	//VertexData vertices[] = {
+       
+    //std::cout << vertices[].position.x;
+
+    //color
     SDL_GPUColorTargetInfo colorInfo = {};
     
     //Shaders
@@ -130,22 +163,22 @@ int main(int argc, char* argv[]) {
     target_info.color_target_descriptions = &color_target_descriptions;
 
 	//position, color
-    VertexData vertices[] = {
-        {{-0.5f,  0.5f, 0.0f },{0,1} , {1.0f, 0.0f, 0.0f, 1.0f}}, // Triangle 1
-        {{ 0.5f,  0.5f, 0.0f },{1,1} , {0.0f, 1.0f, 0.0f, 1.0f}},
-        {{-0.5f, -0.5f, 0.0f },{0,0} , {0.0f, 0.0f, 1.0f, 1.0f}},
-        {{ 0.5f, -0.5f, 0.0f },{1,0} , {1.0f, 1.0f, 0.0f, 1.0f}}, // Triangle 2
-    };
+    //VertexData vertices[] = {
+    //    {{-0.5f,  0.5f, 0.0f },{0,1} , {1.0f, 0.0f, 0.0f, 1.0f}}, // Triangle 1
+    //    {{ 0.5f,  0.5f, 0.0f },{1,1} , {0.0f, 1.0f, 0.0f, 1.0f}},
+    //    {{-0.5f, -0.5f, 0.0f },{0,0} , {0.0f, 0.0f, 1.0f, 1.0f}},
+    //    {{ 0.5f, -0.5f, 0.0f },{1,0} , {1.0f, 1.0f, 0.0f, 1.0f}}, // Triangle 2
+    //};
 
-    Uint32 indices[] {
-        0, 1, 2,
-        2, 1, 3
-    };
+    //Uint32 indices[] {
+    //    0, 1, 2,
+    //    2, 1, 3
+    //};
 
     // Create and upload the vertex buffer
     SDL_GPUBufferCreateInfo vertexBufferInfo = {};
     vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-    vertexBufferInfo.size = sizeof(vertices);
+    vertexBufferInfo.size = vertices.size() * sizeof(VertexData);
     SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(device, &vertexBufferInfo);
     if (!vertexBuffer) {
         std::cout << "Failed to create vertex buffer. Error: " << SDL_GetError() << std::endl;
@@ -154,7 +187,7 @@ int main(int argc, char* argv[]) {
     // Create and upload the index buffer
     SDL_GPUBufferCreateInfo indexBufferInfo = {};
     indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
-    indexBufferInfo.size = sizeof(indices);
+    indexBufferInfo.size = indices.size() * sizeof(Uint32);
     SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(device, &indexBufferInfo);
     if (!indexBuffer) {
         std::cout << "Failed to create index buffer. Error: " << SDL_GetError() << std::endl;
@@ -165,12 +198,26 @@ int main(int argc, char* argv[]) {
     //Transfer Buffer
     SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
     transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transferBufferInfo.size = sizeof(vertices) + sizeof(indices);
+    transferBufferInfo.size = vertices.size() * sizeof(VertexData) + indices.size() * sizeof(Uint32);
     SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferBufferInfo);
 
+    if (!transferBuffer) {
+        std::cout << "Failed to create transfer buffer. Error: " << SDL_GetError() << std::endl;
+        return -1; // Handle error appropriately
+    }
+
     void* transferMem = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
-    memcpy(transferMem, vertices, sizeof(vertices));
-    memcpy(static_cast<char*>(transferMem) + sizeof(vertices), indices, sizeof(indices));
+    if (!transferMem) {
+        std::cout << "Failed to map transfer buffer. Error: " << SDL_GetError() << std::endl;
+        return -1; // Handle error appropriately
+    }
+
+    // Copy vertex data
+    std::memcpy(transferMem, vertices.data(), vertices.size() * sizeof(VertexData));
+
+    // Copy index data
+    std::memcpy(static_cast<char*>(transferMem) + vertices.size() * sizeof(VertexData), indices.data(), indices.size() * sizeof(Uint32));
+
     SDL_UnmapGPUTransferBuffer(device, transferBuffer);
 
     //Transfer Buffer
@@ -198,7 +245,7 @@ int main(int argc, char* argv[]) {
 
     SDL_GPUTransferBufferLocation indexTransferLocation = {};
     indexTransferLocation.transfer_buffer = transferBuffer;
-    indexTransferLocation.offset = sizeof(vertices);
+    indexTransferLocation.offset = vertices.size() * sizeof(vertices);
 
     SDL_GPUBufferRegion indexBufferRegion = {};
     indexBufferRegion.buffer = indexBuffer;
@@ -223,7 +270,7 @@ int main(int argc, char* argv[]) {
     SDL_ReleaseGPUTransferBuffer(device, textureTransferBuffer);
 
     //GPU sampler
-	SDL_GPUSamplerCreateInfo samplerCreateInfo = {};
+    SDL_GPUSamplerCreateInfo samplerCreateInfo = {};
 	SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device, &samplerCreateInfo);
 
     // Vertex input state
@@ -272,7 +319,7 @@ int main(int argc, char* argv[]) {
     const float rotationSpeed = glm::radians(90.0f);
     float rotation = 0.0f;
 
-    glm::mat4 Projection = glm::perspective(70.0f, (float)width / height, 0.000000f, 10000.0f);
+    glm::mat4 Projection = glm::perspective(70.0f, (float)width / height, 0.0000001f, 10000.0f);
     glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.0f, 0.0f, -10.0f)) * glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 1.0f, -0.0f));
 
     SDL_GPUBufferBinding vertexBufferBinding = {};
@@ -320,7 +367,7 @@ int main(int argc, char* argv[]) {
         SDL_BindGPUIndexBuffer(renderPass, &indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &ubo, sizeof(ubo));
 		SDL_BindGPUFragmentSamplers(renderPass, 0,&textureSamplerBinding,1);
-        SDL_DrawGPUIndexedPrimitives(renderPass, 6, 1, 0, 0, 0);
+        SDL_DrawGPUIndexedPrimitives(renderPass, indices.size(), 1, 0, 0, 0);
         SDL_EndGPURenderPass(renderPass);
         assert(SDL_SubmitGPUCommandBuffer(commandBuffer));
     }
