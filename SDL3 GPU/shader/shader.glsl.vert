@@ -17,3 +17,28 @@ void main(){
 	color = inColor;
 	outTexcoord = texcoord;
 }
+
+
+        UBO ubo = { Projection * model };
+        SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+        SDL_GPUTexture* texture;
+        SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, window, &texture, NULL, NULL);
+
+        SDL_GPUColorTargetInfo colorInfo = {};
+        colorInfo.texture = texture;
+        colorInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+        colorInfo.clear_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        colorInfo.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorInfo, 1, NULL);
+        rotation += rotationSpeed * deltaTime;
+        model = glm::translate(glm::mat4(1.0f), glm::vec3(-0.0f, 0.0f, -10.0f)) * glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 1.0f, -0.0f));
+
+        SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+        SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBufferBinding, 1);
+        SDL_BindGPUIndexBuffer(renderPass, &indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        SDL_PushGPUVertexUniformData(commandBuffer, 0, &ubo, sizeof(ubo));
+		SDL_BindGPUFragmentSamplers(renderPass, 0,&textureSamplerBinding,1);
+        SDL_DrawGPUIndexedPrimitives(renderPass, 6, 1, 0, 0, 0);
+        SDL_EndGPURenderPass(renderPass);
+        assert(SDL_SubmitGPUCommandBuffer(commandBuffer));

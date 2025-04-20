@@ -24,7 +24,7 @@ struct Vec2 {
 
 struct VertexData {
     Vec3 position;
-	Vec2 texcoord;
+    Vec2 texcoord;
     SDL_FColor color;
 };
 
@@ -79,6 +79,41 @@ SDL_GPUShader* load_shader(
     return shader;
 }
 
+std::vector<VertexData> load_model(const std::string& path, std::vector<Uint32>& indices) {
+    Assimp::Importer importer;
+    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+        std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+        return {};
+    }
+
+    std::vector<VertexData> vertices;
+
+    for (size_t i = 0; i < scene->mNumMeshes; ++i) {
+        const auto& mesh = scene->mMeshes[i];
+
+        // Process vertices
+        for (size_t j = 0; j < mesh->mNumVertices; ++j) {
+            VertexData vertex;
+            vertex.position = { mesh->mVertices[j].x, mesh->mVertices[j].y, mesh->mVertices[j].z };
+            vertex.texcoord = mesh->mTextureCoords[0] ? Vec2{ mesh->mTextureCoords[0][j].x, mesh->mTextureCoords[0][j].y } : Vec2{ 0.0f, 0.0f };
+            vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // Default white color
+            vertices.push_back(vertex);
+        }
+
+        // Process indices
+        for (size_t j = 0; j < mesh->mNumFaces; ++j) {
+            const auto& face = mesh->mFaces[j];
+            for (size_t k = 0; k < face.mNumIndices; ++k) {
+                indices.push_back(face.mIndices[k]);
+            }
+        }
+    }
+
+    return vertices;
+}
+
 int main(int argc, char* argv[]) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::cout << "Failed to initialize SDL. Error: " << SDL_GetError() << std::endl;
@@ -103,50 +138,30 @@ int main(int argc, char* argv[]) {
     }
     // Textures
     int imageH, imageW;
-	stbi_uc * image_data = stbi_load("res/viking_room.png",&imageW,&imageH,NULL,4);
-	assert(image_data != NULL);
-	SDL_GPUTextureCreateInfo textureCreateInfo = {};
+    stbi_uc* image_data = stbi_load("res/viking_room.png", &imageW, &imageH, NULL, 4);
+    assert(image_data != NULL);
+    SDL_GPUTextureCreateInfo textureCreateInfo = {};
     textureCreateInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     textureCreateInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-	textureCreateInfo.width = imageW;
-	textureCreateInfo.height = imageH;
+    textureCreateInfo.width = imageW;
+    textureCreateInfo.height = imageH;
     textureCreateInfo.layer_count_or_depth = 1;
     textureCreateInfo.num_levels = 1;
     SDL_GPUTexture* texture = SDL_CreateGPUTexture(device, &textureCreateInfo);
 
-    //Models
-	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile("res/viking_room.obj", aiProcess_Triangulate);
-	assert(scene != NULL);
-    
-	std::vector<VertexData> vertices;
-	std::vector<Uint32> indices;
 
-    for (size_t i{};i < scene->mNumMeshes;++i) {
-		const auto& mesh = scene->mMeshes[i];
-        for (size_t j{};j < mesh->mNumVertices;++j) {
-			const auto& vertex = mesh->mVertices[j];
-            vertices.push_back({
-				.position = {vertex.x, vertex.y, vertex.z},
-				.texcoord = mesh->mTextureCoords[0] ? Vec2{mesh->mTextureCoords[0][j].x, mesh->mTextureCoords[0][j].y} : Vec2{0, 0},
-                .color = {1.0f, 1.0f, 1.0f, 1.0f}
-                }
-            );
-        }
-        for (size_t j{};j < mesh->mNumFaces;++j) {
-			const auto& face = mesh->mFaces[j];
-            for (size_t k{};k < face.mNumIndices;++k) {
-				indices.push_back(face.mIndices[k]);
-            }
-        }
-    }
-	//VertexData vertices[] = {
-       
+    std::vector<Uint32> indices;
+    std::vector<VertexData> vertices = load_model("res/viking_room.obj", indices);
+    assert(!vertices.empty());
+    assert(!indices.empty());
+
+    //VertexData vertices[] = {
+
     //std::cout << vertices[].position.x;
 
     //color
     SDL_GPUColorTargetInfo colorInfo = {};
-    
+
     //Shaders
     SDL_GPUShader* vertexShader = load_shader(device, "../../../../SDL3 GPU/shader/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 0, 1, 0, NULL);
     SDL_GPUShader* fragmentShader = load_shader(device, "../../../../SDL3 GPU/shader/shader.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 0, NULL, NULL);
@@ -162,7 +177,7 @@ int main(int argc, char* argv[]) {
     target_info.num_color_targets = 1;
     target_info.color_target_descriptions = &color_target_descriptions;
 
-	//position, color
+    //position, color
     //VertexData vertices[] = {
     //    {{-0.5f,  0.5f, 0.0f },{0,1} , {1.0f, 0.0f, 0.0f, 1.0f}}, // Triangle 1
     //    {{ 0.5f,  0.5f, 0.0f },{1,1} , {0.0f, 1.0f, 0.0f, 1.0f}},
@@ -225,8 +240,10 @@ int main(int argc, char* argv[]) {
     textureTransferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     textureTransferBufferInfo.size = imageW * imageH * 4;
     SDL_GPUTransferBuffer* textureTransferBuffer = SDL_CreateGPUTransferBuffer(device, &textureTransferBufferInfo);
+    assert(textureTransferBuffer!=NULL);
     void* textureTransferMem = SDL_MapGPUTransferBuffer(device, textureTransferBuffer, false);
-	memcpy(textureTransferMem, image_data, imageW* imageH * 4);
+    assert(textureTransferMem != NULL);
+    memcpy(textureTransferMem, image_data, imageW * imageH * 4);
     SDL_UnmapGPUTransferBuffer(device, textureTransferBuffer);
 
     SDL_GPUCommandBuffer* copyCommandBuffer = SDL_AcquireGPUCommandBuffer(device);
@@ -238,31 +255,31 @@ int main(int argc, char* argv[]) {
 
     SDL_GPUBufferRegion vertexBufferRegion = {};
     vertexBufferRegion.buffer = vertexBuffer;
-    vertexBufferRegion.size = sizeof(vertices);
+    vertexBufferRegion.size = vertices.size() * sizeof(VertexData);
 
     SDL_UploadToGPUBuffer(copyPass, &vertexTransferLocation, &vertexBufferRegion, false);
 
 
     SDL_GPUTransferBufferLocation indexTransferLocation = {};
     indexTransferLocation.transfer_buffer = transferBuffer;
-    indexTransferLocation.offset = vertices.size() * sizeof(vertices);
+    indexTransferLocation.offset = vertices.size() * sizeof(VertexData);
 
     SDL_GPUBufferRegion indexBufferRegion = {};
     indexBufferRegion.buffer = indexBuffer;
-    indexBufferRegion.size = sizeof(indices);
+    indexBufferRegion.size = indices.size() * sizeof(Uint32);
 
-	SDL_GPUTextureTransferInfo textureTransferInfo = {};
-	textureTransferInfo.transfer_buffer = textureTransferBuffer;
-	textureTransferInfo.offset = 0;
+    SDL_GPUTextureTransferInfo textureTransferInfo = {};
+    textureTransferInfo.transfer_buffer = textureTransferBuffer;
+    textureTransferInfo.offset = 0;
 
-	SDL_GPUTextureRegion textureRegion = {};
-	textureRegion.texture = texture;
-	textureRegion.w = imageW;
-	textureRegion.h = imageH;
+    SDL_GPUTextureRegion textureRegion = {};
+    textureRegion.texture = texture;
+    textureRegion.w = imageW;
+    textureRegion.h = imageH;
     textureRegion.d = 1;
 
     SDL_UploadToGPUBuffer(copyPass, &indexTransferLocation, &indexBufferRegion, false);
-    SDL_UploadToGPUTexture(copyPass,&textureTransferInfo,&textureRegion,false);
+    SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
     SDL_EndGPUCopyPass(copyPass);
     assert(SDL_SubmitGPUCommandBuffer(copyCommandBuffer));
 
@@ -271,7 +288,7 @@ int main(int argc, char* argv[]) {
 
     //GPU sampler
     SDL_GPUSamplerCreateInfo samplerCreateInfo = {};
-	SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device, &samplerCreateInfo);
+    SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device, &samplerCreateInfo);
 
     // Vertex input state
     SDL_GPUVertexBufferDescription vertexBufferDescription = {};
@@ -279,13 +296,13 @@ int main(int argc, char* argv[]) {
     vertexBufferDescription.pitch = sizeof(VertexData);
     vertexBufferDescription.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-	//vertex attributes
+    //vertex attributes
     SDL_GPUVertexAttribute vertexAttributes[3] = {};
     //Position
     vertexAttributes[0].location = 0;
     vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
     vertexAttributes[0].offset = offsetof(VertexData, position);
-	//Texcoord
+    //Texcoord
     vertexAttributes[1].location = 1;
     vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
     vertexAttributes[1].offset = offsetof(VertexData, texcoord);
@@ -329,9 +346,9 @@ int main(int argc, char* argv[]) {
     SDL_GPUBufferBinding indexBufferBinding = {};
     indexBufferBinding.buffer = indexBuffer;
 
-	SDL_GPUTextureSamplerBinding textureSamplerBinding = {};
-	textureSamplerBinding.texture = texture;
-	textureSamplerBinding.sampler = sampler;
+    SDL_GPUTextureSamplerBinding textureSamplerBinding = {};
+    textureSamplerBinding.texture = texture;
+    textureSamplerBinding.sampler = sampler;
 
     Uint64 lastTime = SDL_GetPerformanceCounter();
     SDL_Event event;
@@ -366,7 +383,7 @@ int main(int argc, char* argv[]) {
         SDL_BindGPUVertexBuffers(renderPass, 0, &vertexBufferBinding, 1);
         SDL_BindGPUIndexBuffer(renderPass, &indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &ubo, sizeof(ubo));
-		SDL_BindGPUFragmentSamplers(renderPass, 0,&textureSamplerBinding,1);
+        SDL_BindGPUFragmentSamplers(renderPass, 0, &textureSamplerBinding, 1);
         SDL_DrawGPUIndexedPrimitives(renderPass, indices.size(), 1, 0, 0, 0);
         SDL_EndGPURenderPass(renderPass);
         assert(SDL_SubmitGPUCommandBuffer(commandBuffer));
@@ -376,48 +393,3 @@ int main(int argc, char* argv[]) {
     SDL_Quit();
     return 0;
 }
-
-//Swapchan texture is all big texture that has all textures on screen
-//Swapchain texture which is just a special texture that represents a window's contents
-//1.aquire command buffer
-//2.wait aquire swapchain texture
-//3.begain render pass
-// render - bnd everything
-//4.end renderpass
-//5.submit command buffer
-
-
-//1.	Define Vertex Structure: Define a structure that represents your vertex data, including positions, colors, normals, etc.
-//2.	Create Vertex Buffer : Create a GPU buffer to store your vertex data.
-//3.	Upload Vertex Data : Upload your vertex data to the GPU buffer.
-//		SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
-//transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-//transferBufferInfo.size = sizeof(vertices);
-//SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferBufferInfo);
-//
-//void* mappedMemory = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
-//memcpy(mappedMemory, vertices, sizeof(vertices));
-//SDL_UnmapGPUTransferBuffer(device, transferBuffer);
-//
-//SDL_GPUCommandBuffer* copyCommandBuffer = SDL_AcquireGPUCommandBuffer(device);
-//SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(copyCommandBuffer);
-//
-//SDL_GPUTransferBufferLocation transferBufferLocation = {};
-//transferBufferLocation.transfer_buffer = transferBuffer;
-//
-//SDL_GPUBufferRegion bufferRegion = {};
-//bufferRegion.buffer = vertexBuffer;
-//bufferRegion.size = sizeof(vertices);
-//
-//SDL_UploadToGPUBuffer(copyPass, &transferBufferLocation, &bufferRegion, false);
-//SDL_EndGPUCopyPass(copyPass);
-//SDL_SubmitGPUCommandBuffer(copyCommandBuffer);
-//4.	Describe Vertex Buffer : Define the layout of your vertex buffer, specifying the attributes and their formats.
-//5.	Bind Vertex Buffer : Bind the vertex buffer to the pipeline before drawing.
-
-//textures
-// load texture
-// 
-
-
-// i hate u nuget
